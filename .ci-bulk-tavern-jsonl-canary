@@ -1,3 +1,4 @@
 Temporary CI/build trigger for pre-PR browser UAT. Not part of the upstream contribution.
 Actions enabled on fork; retriggered 2026-09-27.
 Check-only retrigger 2026-09-27.
+Release retrigger with branch-local write permission 2026-09-27.
