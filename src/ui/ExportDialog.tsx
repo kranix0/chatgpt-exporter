@@ -998,3 +998,14 @@ export function ExportDialog({ format, open, onOpenChange }: ExportDialogProps) 
         if (!value && exportingRef.current) return // block close while exporting
         onOpenChange(value)
     }
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={onChange}
+            title={t('Export Dialog Title')}
+            className="ce-dialog-plain"
+        >
+            <DialogContent format={format} onClose={() => onChange(false)} />
+        </Dialog>
+    )
+}
