@@ -998,6 +998,8 @@ export function ExportDialog({ format, open, onOpenChange }: ExportDialogProps) 
         if (!value && exportingRef.current) return // block close while exporting
         onOpenChange(value)
     }
+
+
     return (
         <Dialog
             open={open}
