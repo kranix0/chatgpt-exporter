@@ -24,6 +24,9 @@ vi.mock('../src/utils/download', async importOriginal => ({
 
 const { exportAllToHtml } = await import('../src/exporter/html')
 const { exportAllToMarkdown } = await import('../src/exporter/markdown')
+const { processConversation } = await import('../src/api')
+const { exportAllToTavern } = await import('../src/exporter/json')
+const { convertToTavern } = await import('../src/utils/conversion')
 
 const INJECTED = '<style>body { display: none }</style><div class="open">'
 
@@ -115,5 +118,60 @@ describe('exportAllToMarkdown', () => {
             { role: 'assistant', content: { content_type: 'code', text: 'print(1)' } },
         ]))
         expect(markdown).toContain('#### ChatGPT:\nCode:\n\n```\nprint(1)\n```')
+    })
+})
+
+
+describe('exportAllToTavern', () => {
+    it('creates one Tavern JSONL file per conversation in a zip', async () => {
+        const first = conversation([
+            { role: 'user', content: { content_type: 'text', parts: ['Hello'] } },
+            { role: 'assistant', content: { content_type: 'text', parts: ['Hi'] } },
+        ])
+        first.id = 'chat-one'
+        first.title = 'First Chat'
+
+        const second = conversation([
+            { role: 'user', content: { content_type: 'text', parts: ['Second'] } },
+            { role: 'assistant', content: { content_type: 'text', parts: ['Reply'] } },
+        ])
+        second.id = 'chat-two'
+        second.title = 'Second Chat'
+
+        downloadFile.mockClear()
+        await exportAllToTavern('{title}', [first, second])
+
+        expect(downloadFile).toHaveBeenCalledTimes(1)
+        const [zipName, mimeType, blob] = downloadFile.mock.calls[0]
+        expect(zipName).toBe('chatgpt-export-tavern.zip')
+        expect(mimeType).toBe('application/zip')
+
+        const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+        expect(Object.keys(zip.files).sort()).toEqual([
+            'First_Chat.tavern.jsonl',
+            'Second_Chat.tavern.jsonl',
+        ])
+
+        const firstContent = await zip.file('First_Chat.tavern.jsonl')!.async('string')
+        expect(firstContent).toBe(convertToTavern(processConversation(first)))
+    })
+
+    it('keeps duplicate filenames unique without changing the Tavern suffix', async () => {
+        const first = conversation([{ role: 'user', content: { content_type: 'text', parts: ['One'] } }])
+        const second = conversation([{ role: 'user', content: { content_type: 'text', parts: ['Two'] } }])
+        first.id = 'chat-one'
+        second.id = 'chat-two'
+        first.title = second.title = 'Same Title'
+
+        downloadFile.mockClear()
+        await exportAllToTavern('{title}', [first, second], undefined, 'My Project', 2, 3)
+
+        const [zipName, , blob] = downloadFile.mock.calls[0]
+        expect(zipName).toBe('chatgpt-export-tavern-project-my-project-part-02-of-03.zip')
+        const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+        expect(Object.keys(zip.files).sort()).toEqual([
+            'Same_Title (1).tavern.jsonl',
+            'Same_Title.tavern.jsonl',
+        ])
     })
 })
