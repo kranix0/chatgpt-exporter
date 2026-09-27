@@ -4,7 +4,7 @@ import i18n, { useTranslation } from '../i18n'
 import { RateLimitError, archiveConversation, deleteConversation, fetchAllConversations, fetchConversation, fetchConversationsPage, fetchProjects, probeApi, withImageAssets } from '../api'
 import { EXPORT_OPERATION_BATCH, KEY_EXPORTED_UPDATE_TIMES } from '../constants'
 import { exportAllToHtml } from '../exporter/html'
-import { exportAllToJson, exportAllToOfficialJson } from '../exporter/json'
+import { exportAllToJson, exportAllToOfficialJson, exportAllToTavern } from '../exporter/json'
 import { exportAllToMarkdown } from '../exporter/markdown'
 import { applyHead, refreshConversationList } from '../utils/conversationList'
 import { RequestQueue } from '../utils/queue'
@@ -419,6 +419,7 @@ const DialogContent: FC<DialogContentProps> = ({ format, onClose }) => {
         { label: 'HTML', callback: exportAllToHtml },
         { label: 'JSON', callback: exportAllToOfficialJson },
         { label: 'JSON (ZIP)', callback: exportAllToJson },
+        { label: 'JSONL (TavernAI, SillyTavern)', callback: exportAllToTavern },
     ], [])
 
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -797,7 +798,7 @@ const DialogContent: FC<DialogContentProps> = ({ format, onClose }) => {
 
     const totalBatches = Math.ceil(selected.length / EXPORT_OPERATION_BATCH) || 1
 
-    // ── API health probe ────────────────────────────────────────────────────
+    // ── API health probe ──────────────────────────────────────────────────────
     type ProbeStatus = null | 'testing' | 'ok' | 'rate_limited' | 'error'
     const [probeStatus, setProbeStatus] = useState<ProbeStatus>(null)
     const [probeRetryAfterSecs, setProbeRetryAfterSecs] = useState<number | undefined>()
@@ -997,15 +998,3 @@ export function ExportDialog({ format, open, onOpenChange }: ExportDialogProps) 
         if (!value && exportingRef.current) return // block close while exporting
         onOpenChange(value)
     }
-
-    return (
-        <Dialog
-            open={open}
-            onOpenChange={onChange}
-            title={t('Export Dialog Title')}
-            className="ce-dialog-plain"
-        >
-            <DialogContent format={format} onClose={() => onChange(false)} />
-        </Dialog>
-    )
-}
