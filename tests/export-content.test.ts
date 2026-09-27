@@ -30,13 +30,13 @@ const { convertToTavern } = await import('../src/utils/conversion')
 
 const INJECTED = '<style>body { display: none }</style><div class="open">'
 
-function conversation(messages: Array<{ role: string, content: unknown, metadata?: unknown }>): ApiConversationWithId {
+function conversation(messages: Array<{ role: string, content: unknown, metadata?: unknown, create_time?: number }>): ApiConversationWithId {
     const ids = messages.map((_, i) => `m${i}`)
     const mapping = Object.fromEntries(messages.map((message, i) => [ids[i], {
         id: ids[i],
         parent: ids[i - 1] ?? null,
         children: ids[i + 1] ? [ids[i + 1]] : [],
-        message: { id: ids[i], author: { role: message.role }, recipient: 'all', content: message.content, metadata: message.metadata ?? {} },
+        message: { id: ids[i], author: { role: message.role }, recipient: 'all', content: message.content, metadata: message.metadata ?? {}, create_time: message.create_time },
     }]))
     return {
         id: 'chat-id',
@@ -121,19 +121,18 @@ describe('exportAllToMarkdown', () => {
     })
 })
 
-
 describe('exportAllToTavern', () => {
     it('creates one Tavern JSONL file per conversation in a zip', async () => {
         const first = conversation([
-            { role: 'user', content: { content_type: 'text', parts: ['Hello'] } },
-            { role: 'assistant', content: { content_type: 'text', parts: ['Hi'] } },
+            { role: 'user', content: { content_type: 'text', parts: ['Hello'] }, create_time: 1 },
+            { role: 'assistant', content: { content_type: 'text', parts: ['Hi'] }, create_time: 2 },
         ])
         first.id = 'chat-one'
         first.title = 'First Chat'
 
         const second = conversation([
-            { role: 'user', content: { content_type: 'text', parts: ['Second'] } },
-            { role: 'assistant', content: { content_type: 'text', parts: ['Reply'] } },
+            { role: 'user', content: { content_type: 'text', parts: ['Second'] }, create_time: 3 },
+            { role: 'assistant', content: { content_type: 'text', parts: ['Reply'] }, create_time: 4 },
         ])
         second.id = 'chat-two'
         second.title = 'Second Chat'
@@ -157,8 +156,8 @@ describe('exportAllToTavern', () => {
     })
 
     it('keeps duplicate filenames unique without changing the Tavern suffix', async () => {
-        const first = conversation([{ role: 'user', content: { content_type: 'text', parts: ['One'] } }])
-        const second = conversation([{ role: 'user', content: { content_type: 'text', parts: ['Two'] } }])
+        const first = conversation([{ role: 'user', content: { content_type: 'text', parts: ['One'] }, create_time: 1 }])
+        const second = conversation([{ role: 'user', content: { content_type: 'text', parts: ['Two'] }, create_time: 2 }])
         first.id = 'chat-one'
         second.id = 'chat-two'
         first.title = second.title = 'Same Title'
