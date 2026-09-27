@@ -797,7 +797,7 @@ const DialogContent: FC<DialogContentProps> = ({ format, onClose }) => {
 
     const totalBatches = Math.ceil(selected.length / EXPORT_OPERATION_BATCH) || 1
 
-    // ── API health probe ──────────────────────────────────────────────────────
+    // ── API health probe ────────────────────────────────────────────────────
     type ProbeStatus = null | 'testing' | 'ok' | 'rate_limited' | 'error'
     const [probeStatus, setProbeStatus] = useState<ProbeStatus>(null)
     const [probeRetryAfterSecs, setProbeRetryAfterSecs] = useState<number | undefined>()
