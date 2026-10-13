@@ -1,0 +1,81 @@
+name: One-off upstream sync for PR 410
+
+on:
+  push:
+    branches:
+      - ops/sync-pr-410-20261013
+
+permissions:
+  contents: write
+
+jobs:
+  sync-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bulk-tavern-jsonl-pr
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Merge latest upstream with guarded conflict resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin master feature/bulk-tavern-jsonl-pr
+          test "$(git rev-parse origin/master)" = '4c8fe6ea01d58a59bc59aea9ba1421fee7d80969'
+          test "$(git rev-parse HEAD)" = 'f89b3418a4142e5bbe81a6733777ce206b5d9b42'
+          git remote add upstream https://github.com/pionxzh/chatgpt-exporter.git
+          git fetch upstream master
+          UPSTREAM_SHA="$(git rev-parse FETCH_HEAD)"
+          echo "Upstream baseline: $UPSTREAM_SHA"
+          if git merge --no-ff --no-commit "$UPSTREAM_SHA"; then
+            echo 'Merge was conflict-free.'
+          else
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ "$conflicts" != 'src/ui/ExportDialog.tsx' ]; then
+              echo "Unexpected conflicts: $conflicts" >&2
+              exit 1
+            fi
+            git checkout --theirs -- src/ui/ExportDialog.tsx
+            python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/ui/ExportDialog.tsx')
+          s = p.read_text()
+          changes = [
+              ("import { exportAllToJson, exportAllToOfficialJson } from '../exporter/json'", "import { exportAllToJson, exportAllToOfficialJson, exportAllToTavern } from '../exporter/json'"),
+              ("        { label: 'JSON (ZIP)', callback: exportAllToJson },", "        { label: 'JSON (ZIP)', callback: exportAllToJson },\n        { label: 'JSONL (TavernAI, SillyTavern)', callback: exportAllToTavern },"),
+              ("const skipImages = exportType === 'JSON' || leaveOutImages", "const skipImages = exportType === 'JSON' || exportType === 'JSONL (TavernAI, SillyTavern)' || leaveOutImages"),
+          ]
+          for original, updated in changes:
+              assert s.count(original) == 1, f'Unexpected upstream structure for: {original}'
+              s = s.replace(original, updated)
+          p.write_text(s)
+          PY
+            git add src/ui/ExportDialog.tsx
+          fi
+          test -z "$(git diff --name-only --diff-filter=U)"
+          grep -q 'exportAllToTavern' src/exporter/json.ts
+          grep -q 'getImageMode' src/exporter/json.ts
+          grep -q 'JSONL (TavernAI, SillyTavern)' src/ui/ExportDialog.tsx
+          grep -q "exportType === 'JSONL (TavernAI, SillyTavern)' || leaveOutImages" src/ui/ExportDialog.tsx
+          git diff --cached --check
+          echo "$UPSTREAM_SHA" > /tmp/verified-upstream-sha
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - name: Commit verified merge and fast-forward fork master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git commit -m 'chore: merge current upstream into Tavern bulk export branch'
+          git push origin HEAD:refs/heads/feature/bulk-tavern-jsonl-pr
+          UPSTREAM_SHA="$(cat /tmp/verified-upstream-sha)"
+          git push origin "$UPSTREAM_SHA":refs/heads/master
