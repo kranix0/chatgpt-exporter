@@ -1,0 +1,59 @@
+name: One-off PR410 ZIP label
+
+on:
+  push:
+    branches:
+      - ops/pr410-label-zip-20261013
+
+permissions:
+  contents: write
+
+jobs:
+  label-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bulk-tavern-jsonl-pr
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Change new option label, preserve existing formats
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          test "$(git rev-parse HEAD)" = '6c22ef3b5244412c15cd9977bc9d6d31e45af80c'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/ui/ExportDialog.tsx')
+          s=p.read_text()
+          original="'JSONL (TavernAI, SillyTavern)'"
+          replacement="'TavernAI JSONL (ZIP)'"
+          assert s.count(original)==2, 'Expected option and image handling to share original format label'
+          assert s.count("'JSON (ZIP)'")==2, 'Existing zipped JSON format changed'
+          assert s.count("'JSON'")==2, 'Existing combined JSON format changed'
+          s=s.replace(original,replacement)
+          assert s.count(replacement)==2
+          p.write_text(s)
+          PY
+          test "$(git diff --name-only)" = "src/ui/ExportDialog.tsx"
+          git diff --check
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - name: Publish verified source change to existing PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add src/ui/ExportDialog.tsx
+          git diff --cached --check
+          git commit -m 'fix: identify Tavern bulk export as ZIP in format list'
+          git push origin HEAD:refs/heads/feature/bulk-tavern-jsonl-pr
