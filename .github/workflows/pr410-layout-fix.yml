@@ -1,0 +1,71 @@
+name: One-off PR410 action bar repair
+
+on:
+  push:
+    branches:
+      - ops/pr410-layout-fix-20261013
+
+permissions:
+  contents: write
+
+jobs:
+  repair-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bulk-tavern-jsonl-pr
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Patch exact known layout regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          test "$(git rev-parse HEAD)" = "189c881ed43b33161d84fb717dda40867d52bad9"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/ui/Dialog.css')
+          s = p.read_text()
+          original = """.ce-action-bar > .ce-select {
+              flex-shrink: 0;
+          }"""
+          replacement = """.ce-action-bar > .ce-select {
+              /* Long format names may not displace the Export button.
+                 The native option menu retains the complete name. */
+              flex: 0 1 auto;
+              min-width: 0;
+              max-width: 45%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+          }"""
+          assert s.count(original) == 1, 'Existing action-bar selector changed'
+          s = s.replace(original, replacement)
+          original_mobile = "    .ce-action-bar > .ce-select { width: 100%; }"
+          replacement_mobile = "    .ce-action-bar > .ce-select { width: 100%; max-width: none; }"
+          assert s.count(original_mobile) == 1, 'Existing mobile rule changed'
+          s = s.replace(original_mobile, replacement_mobile)
+          p.write_text(s)
+          PY
+          test "$(git diff --name-only)" = "src/ui/Dialog.css"
+          git diff --check
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - name: Commit only validated source change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add src/ui/Dialog.css
+          git diff --cached --check
+          git commit -m 'fix: keep bulk export actions on one row for long formats'
+          git push origin HEAD:refs/heads/feature/bulk-tavern-jsonl-pr
