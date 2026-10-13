@@ -1,0 +1,65 @@
+name: PR410 OpenAI ZIP option label correction
+
+on:
+  push:
+    branches:
+      - ops/pr410-openai-zip-label-20261013
+    paths:
+      - .github/workflows/pr410-openai-label.yml
+
+permissions:
+  contents: write
+
+jobs:
+  correct-check-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/bulk-tavern-jsonl-pr
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Guarded format-label correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          test "$(git rev-parse HEAD)" = '1a0ed93ffbfc3714becd0d006e3dd5d0e9ca62bc'
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/ui/ExportDialog.tsx')
+          s=p.read_text()
+          old="'JSON (ZIP)'"
+          new="'OpenAI JSON (ZIP)'"
+          assert s.count(old)==2, "Unexpected JSON ZIP label references"
+          assert s.count(new)==0, "New label already present"
+          assert s.count("'JSON'")==2, "Other JSON format changed"
+          assert s.count("'TavernAI JSONL (ZIP)'")==2, "Tavern ZIP format changed"
+          s=s.replace(old,new)
+          assert s.count(new)==2
+          assert s.count(old)==0
+          assert s.count("'JSON'")==2
+          assert s.count("'TavernAI JSONL (ZIP)'")==2
+          p.write_text(s)
+          PY
+          test "$(git diff --name-only)" = 'src/ui/ExportDialog.tsx'
+          git diff --check
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - name: Commit validated rename to existing PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add src/ui/ExportDialog.tsx
+          git diff --cached --check
+          git commit -m 'fix: clarify OpenAI JSON ZIP bulk export label'
+          git push origin HEAD:refs/heads/feature/bulk-tavern-jsonl-pr
