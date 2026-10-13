@@ -12012,6 +12012,34 @@
 		}), "application/json-lines", convertToTavern(conversation));
 		return true;
 	}
+	async function exportAllToTavern(fileNameFormat, apiConversations, _metaList, projectName, partIndex, totalParts) {
+		const zip = new jszip.default();
+		const filenameMap = new Map();
+		apiConversations.map((x) => processConversation(x)).forEach((conversation) => {
+			let fileName = getFileNameWithFormat(`${fileNameFormat}.tavern`, "jsonl", {
+				title: conversation.title,
+				chatId: conversation.id,
+				createTime: conversation.createTime,
+				updateTime: conversation.updateTime
+			});
+			if (filenameMap.has(fileName)) {
+				const count = filenameMap.get(fileName) ?? 1;
+				filenameMap.set(fileName, count + 1);
+				fileName = `${fileName.slice(0, -13)} (${count}).tavern.jsonl`;
+			} else filenameMap.set(fileName, 1);
+			zip.file(fileName, convertToTavern(conversation));
+		});
+		const blob = await zip.generateAsync({
+			type: "blob",
+			compression: "DEFLATE",
+			compressionOptions: { level: 9 }
+		});
+		downloadFile(buildZipFileName("tavern", projectName, partIndex != null && totalParts != null ? {
+			part: partIndex,
+			total: totalParts
+		} : void 0), "application/zip", blob);
+		return true;
+	}
 	async function exportToOoba(fileNameFormat) {
 		if (!checkIfConversationStarted()) {
 			alert(i18n.t("Please start a conversation first"));
@@ -13340,6 +13368,10 @@
 			{
 				label: "JSON (ZIP)",
 				callback: exportAllToJson
+			},
+			{
+				label: "JSONL (TavernAI, SillyTavern)",
+				callback: exportAllToTavern
 			}
 		], []);
 		const fileInputRef = _$1(null);
@@ -13411,7 +13443,7 @@
 								conversation
 							});
 						}
-						return exportType === "JSON" || imageMode === "omit" && (exportType === "Markdown" || exportType === "JSON (ZIP)") ? conversation : withImageAssets(conversation);
+						return exportType === "JSON" || exportType === "JSONL (TavernAI, SillyTavern)" || imageMode === "omit" && (exportType === "Markdown" || exportType === "JSON (ZIP)") ? conversation : withImageAssets(conversation);
 					}
 				});
 			});
