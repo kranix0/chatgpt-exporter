@@ -5,6 +5,9 @@ on:
     branches:
       - '**'
 
+permissions:
+  contents: write
+
 jobs:
   release:
     if: "contains(github.event.head_commit.message, 'chore: release')"
@@ -13,28 +16,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-
       - name: Use Node.js v24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org/
           cache: pnpm
-
       - run: pnpm install
-
       - name: Lint
         run: pnpm run lint
-
       - name: Test
         run: pnpm run test
-
       - name: Build
         run: pnpm run build
-
       - name: Git commit
         id: commit
         run: |
@@ -45,14 +41,12 @@ jobs:
           git add .
           git commit -m "chore: ci build" -a
         continue-on-error: true
-
       - name: Git push
         uses: ad-m/github-push-action@master
         if: ${{ steps.commit.outcome == 'success' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref }}
-
       - name: Log
         if: ${{ steps.commit.outcome != 'success' }}
         run: echo Nothing to commit.
