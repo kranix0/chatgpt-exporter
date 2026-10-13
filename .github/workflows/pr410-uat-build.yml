@@ -1,0 +1,72 @@
+name: One-off PR410 isolated UAT build
+
+on:
+  push:
+    branches:
+      - ci/pr410-uat-layout-fix-20261013
+    paths:
+      - .github/workflows/pr410-uat-build.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-uat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/pr410-uat-layout-fix-20261013
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Verify source provenance
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor 6c22ef3b5244412c15cd9977bc9d6d31e45af80c HEAD
+          grep -q 'max-width: 45%' src/ui/Dialog.css
+          grep -q 'JSONL (TavernAI, SillyTavern)' src/ui/ExportDialog.tsx
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - name: Produce isolated labelled userscript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          code = Path('dist/chatgpt.user.js').read_text()
+          def replace_meta(key, value):
+              global code
+              pattern = rf'(?m)^(// @{re.escape(key)}\s+).*$'
+              code, count = re.subn(pattern, lambda m: m.group(1) + value, code)
+              assert count == 1, f'Missing or duplicated metadata: {key}'
+          for key in ['name', 'name:zh-CN', 'name:zh-TW']:
+              replace_meta(key, 'ChatGPT Exporter - PR410 UAT (temporary)')
+          replace_meta('namespace', 'kranix0-pr410-uat')
+          replace_meta('version', '2.37.1-pr410-uat.6c22ef3')
+          assert '@updateURL' not in code and '@downloadURL' not in code
+          assert 'JSONL (TavernAI, SillyTavern)' in code
+          assert '.ce-action-bar' in code
+          dest = Path('uat/pr410/chatgpt-exporter-pr410-uat.user.js')
+          dest.parent.mkdir(parents=True, exist_ok=True)
+          dest.write_text(code)
+          PY
+          node --check uat/pr410/chatgpt-exporter-pr410-uat.user.js
+      - name: Publish isolated UAT artefact in canary branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add uat/pr410/chatgpt-exporter-pr410-uat.user.js
+          git diff --cached --check
+          git commit -m 'chore: ci build isolated PR410 UAT v2'
+          git push origin HEAD:refs/heads/ci/pr410-uat-layout-fix-20261013
