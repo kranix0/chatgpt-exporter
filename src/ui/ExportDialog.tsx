@@ -998,7 +998,8 @@ export function ExportDialog({ format, open, onOpenChange }: ExportDialogProps) 
     const { t } = useTranslation()
     const onChange = (value: boolean) => {
         if (!value && exportingRef.current) return // block close while exporting
-        onOpenChange(value)    }
+        onOpenChange(value)
+    }
 
     return (
         <Dialog
