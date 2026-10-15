@@ -33,6 +33,10 @@ jobs:
             echo 'Expected a full lowercase Git commit SHA' >&2
             exit 2
           fi
+          if [[ "$CANDIDATE_SHA" != '96dc5c4c8e2ea71b28289bbcf0df8dc43e43bf24' ]]; then
+            echo 'This pilot is restricted to the verified PR410 three-file candidate' >&2
+            exit 2
+          fi
 
       - name: Check out exact candidate
         uses: actions/checkout@v4
@@ -67,3 +71,23 @@ jobs:
 
       - name: Production build
         run: pnpm run build
+
+      - name: Identify built userscript
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        shell: bash
+        run: |
+          test -s dist/chatgpt.user.js
+          printf '%s\n' "$CANDIDATE_SHA" > dist/SOURCE_COMMIT.txt
+          sha256sum dist/chatgpt.user.js > dist/SOURCE_SHA256.txt
+
+      - name: Retain exact userscript for personal UAT
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr410-threefile-uat-96dc5c4
+          path: |
+            dist/chatgpt.user.js
+            dist/SOURCE_COMMIT.txt
+            dist/SOURCE_SHA256.txt
+          if-no-files-found: error
+          retention-days: 7
